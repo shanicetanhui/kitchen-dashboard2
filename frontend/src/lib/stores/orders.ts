@@ -1,5 +1,5 @@
 import { writable, derived } from 'svelte/store';
-import { updateOrder } from '$lib/api';
+import { updateOrder } from '../api';
 
 export interface Order {
   id: number;

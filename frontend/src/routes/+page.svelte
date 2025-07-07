@@ -1,11 +1,11 @@
 <script lang="ts">
   import { onMount, onDestroy } from "svelte";
-  import OrderList from "$lib/OrderList.svelte";
+  import OrderList from "../lib/OrderList.svelte";
   import {
     visibleOrdersStore,
     ordersActions,
     type Order,
-  } from "$lib/stores/orders";
+  } from "../lib/stores/orders";
 
   // Accept SSR data
   export let data: { orders: Order[] };
@@ -21,12 +21,10 @@
   }
 
   onMount(() => {
-    // Initialize store with SSR data if not already done
     if ($visibleOrdersStore.length === 0 && data.orders?.length > 0) {
       ordersActions.initialize(data.orders);
     }
 
-    // Setup SSE connection
     eventSource = new EventSource("/api/orders/stream");
 
     eventSource.onmessage = (event) => {
@@ -40,7 +38,6 @@
 
     eventSource.onerror = (error) => {
       console.error("SSE connection error:", error);
-      // Optionally reconnect after a delay
       setTimeout(() => {
         if (eventSource?.readyState === EventSource.CLOSED) {
           eventSource = new EventSource("/api/orders/stream");

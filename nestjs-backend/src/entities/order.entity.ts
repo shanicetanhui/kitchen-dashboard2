@@ -26,10 +26,6 @@ export class Order {
   @UpdateDateColumn()
   updatedAt: Date;
 
-  get isCompleted(): boolean {
-    return this.status === 'Completed';
-  }
-
   @Column({ default: true })
   isVisible: boolean;
 }

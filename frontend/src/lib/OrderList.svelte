@@ -49,30 +49,3 @@
 {:else}
   <p>No orders available.</p>
 {/if}
-
-<style>
-  .hide-btn {
-    position: absolute;
-    top: 10px;
-    right: 15px;
-    color: white;
-    border: none;
-    width: 30px;
-    height: 30px;
-    font-size: 16px;
-    cursor: pointer;
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    z-index: 1;
-  }
-
-  .hide-btn:hover {
-    background-color: #ff5252;
-    transform: scale(1.1);
-  }
-
-  .order-card {
-    position: relative;
-  }
-</style>
