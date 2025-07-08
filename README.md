@@ -6,16 +6,28 @@ View Part 1 [here](https://github.com/shanicetanhui/ordering-app).
 
 ## 🚀 Features
 
-- **Real-time Order Management**: View and manage kitchen orders with live updates
+### Core Features
+- **Real-time Order Management**: View and manage kitchen orders with live updates via Server-Sent Events (SSE)
 - **Order Status Tracking**: Track orders through Pending → Received → Completed states
+- **Order Processing**: Process and complete orders with one-click buttons
 - **RabbitMQ Integration**: Receive new orders and send status updates via message queues
 - **Persistent Storage**: Orders stored in PostgreSQL database with full data persistence
 - **Server-Side Rendering**: Fast initial page loads with SvelteKit SSR
-- **Responsive UI**: Modern, clean interface with smooth animations
-- **Auto-refresh**: Orders update automatically every 2 seconds
-- **Order Processing**: Process and complete orders with one-click buttons
 - **Type Safety**: Full TypeScript implementation across frontend and backend
 - **Docker Support**: Complete containerized deployment with Docker Compose
+
+### Advanced Features
+- **Server-Sent Events (SSE)**: Real-time order updates without polling for instant UI synchronization
+- **Order Soft Delete**: Hide completed orders from view with both frontend-only and database-backed options
+- **Order Visibility Control**: Toggle order visibility with persistent state management
+- **Modular Backend Architecture**: Separated services for better maintainability:
+  - OrderCreationService: Handle new order creation
+  - OrderRetrievalService: Manage order fetching and filtering
+  - OrderUpdateService: Process order status changes
+  - OrderStreamService: Handle real-time SSE streaming
+  - OrderVisibilityService: Manage order visibility state
+- **Responsive UI**: Modern, clean interface with smooth animations and transitions
+- **Completed Orders Page**: Dedicated view for completed orders with visibility controls
 
 ## 🛠️ Tech Stack
 
@@ -53,8 +65,14 @@ View Part 1 [here](https://github.com/shanicetanhui/ordering-app).
 - **Framework**: NestJS with TypeScript decorators and dependency injection
 - **Database**: PostgreSQL with TypeORM for entity management
 - **Message Queue**: RabbitMQ integration with amqplib
-- **Features**: REST API, order management, real-time updates, data persistence
-- **Architecture**: Modular design with controllers, services, entities, and modules
+- **Features**: REST API, order management, real-time updates, data persistence, Server-Sent Events
+- **Architecture**: Modular design with specialized services:
+  - **OrderCreationService**: Handles new order creation and validation
+  - **OrderRetrievalService**: Manages order fetching, filtering, and visibility
+  - **OrderUpdateService**: Processes order status changes and notifications
+  - **OrderStreamService**: Manages real-time SSE connections and broadcasts
+  - **OrderVisibilityService**: Controls order visibility and soft delete functionality
+  - **RabbitMQService**: Handles message queue operations
 - **Port**: 3000
 
 ### Database (PostgreSQL)
@@ -131,6 +149,7 @@ CREATE TABLE orders (
   id SERIAL PRIMARY KEY,
   items JSONB NOT NULL,  -- {"name": "Coffee", "quantity": 2}
   status orders_status_enum DEFAULT 'Pending',  -- Pending/Received/Completed
+  "isVisible" BOOLEAN DEFAULT true,  -- Controls order visibility (soft delete)
   "createdAt" TIMESTAMP DEFAULT now(),
   "updatedAt" TIMESTAMP DEFAULT now()
 );
@@ -196,6 +215,9 @@ RabbitMQ Web UI:  http://localhost:15672 (guest/guest)
 # Get all orders
 GET http://localhost:3000/api/orders
 
+# Get all visible orders only
+GET http://localhost:3000/api/orders?visibleOnly=true
+
 # Create new order
 POST http://localhost:3000/api/orders
 Content-Type: application/json
@@ -212,7 +234,98 @@ Content-Type: application/json
 {
   "status": "Completed"
 }
+
+# Hide order (soft delete)
+PATCH http://localhost:3000/api/orders/123/hide
+
+# Server-Sent Events stream
+GET http://localhost:3000/api/orders/stream
+# Returns: text/event-stream for real-time order updates
 ```
+
+## 🆕 New Features & Usage
+
+### Server-Sent Events (SSE)
+Real-time order updates without polling:
+```javascript
+// Frontend automatically connects to SSE stream
+// Updates are received instantly when orders change
+// No manual refresh needed - orders update in real-time
+```
+
+### Order Soft Delete (Hide/Show)
+Hide completed orders while preserving database records:
+```bash
+# Hide an order (makes it invisible in UI)
+PATCH http://localhost:3000/api/orders/123/hide
+
+# Orders remain in database but are filtered from normal views
+# Can be toggled between frontend-only and database-backed hiding
+```
+
+### Modular Backend Services
+Separated concerns for better maintainability:
+- **OrderCreationService**: Validates and creates new orders
+- **OrderRetrievalService**: Fetches and filters orders with visibility control
+- **OrderUpdateService**: Handles status changes and notifications
+- **OrderStreamService**: Manages SSE connections and real-time broadcasts
+- **OrderVisibilityService**: Controls order visibility state
+
+### Completed Orders Page
+Dedicated view for managing completed orders:
+```
+# Access completed orders at:
+http://localhost:3001/completed
+
+# Features:
+- View all completed orders
+- Hide/show individual orders
+- Real-time updates via SSE
+- Persistent visibility state
+```
+
+### Order Visibility Controls
+Two modes of operation:
+1. **Frontend-only**: Orders hidden in UI but remain in API responses
+2. **Database-backed**: Orders filtered at database level with `isVisible` column
+
+## 🔄 Migration Guide
+
+### Upgrading from Previous Version
+
+If you're upgrading from a previous version, you'll need to add the new `isVisible` column to your database:
+
+```bash
+# Add isVisible column to existing orders table
+docker exec kitchen-postgres psql -U kitchen_user -d kitchen_db -c "ALTER TABLE orders ADD COLUMN IF NOT EXISTS \"isVisible\" BOOLEAN DEFAULT true;"
+
+# Verify column was added
+docker exec kitchen-postgres psql -U kitchen_user -d kitchen_db -c "\d orders"
+```
+
+### Docker Compose Update
+```bash
+# Stop existing containers
+docker-compose down
+
+# Pull latest images and rebuild
+docker-compose up -d --build
+
+# Check that all services are running
+docker-compose ps
+```
+
+### Frontend Updates
+The frontend now uses SSE instead of polling:
+- Remove any manual refresh logic
+- The UI will update automatically via Server-Sent Events
+- Order visibility is managed through stores
+
+### Backend Updates
+The backend is now modular:
+- OrdersService has been split into specialized services
+- New endpoints for SSE streaming and order visibility
+- Enhanced error handling and logging
 
 ## 🛠️ Development
 
@@ -224,19 +337,27 @@ kitchen-dashboard/
 │   ├── src/
 │   │   ├── lib/
 │   │   │   ├── api.ts         # API client functions
-│   │   │   └── OrderList.svelte
+│   │   │   ├── OrderList.svelte # Order list component
+│   │   │   └── stores/
+│   │   │       └── orders.ts   # Order state management with visibility
 │   │   ├── routes/
-│   │   │   └── +page.svelte   # Main dashboard
+│   │   │   ├── +page.svelte   # Main dashboard
+│   │   │   └── completed/
+│   │   │       └── +page.svelte # Completed orders page
 │   │   └── hooks.server.ts    # SSR API proxy
 │   └── Dockerfile
 └── nestjs-backend/            # NestJS application
     ├── src/
     │   ├── entities/
-    │   │   └── order.entity.ts    # Database models
+    │   │   └── order.entity.ts    # Database models with isVisible
     │   ├── orders/
-    │   │   ├── orders.controller.ts # API endpoints
-    │   │   ├── orders.service.ts    # Business logic
-    │   │   └── orders.module.ts     # NestJS module
+    │   │   ├── orders.controller.ts    # API endpoints
+    │   │   ├── orders.module.ts        # NestJS module
+    │   │   ├── order-creation.service.ts   # Order creation logic
+    │   │   ├── order-retrieval.service.ts  # Order fetching logic
+    │   │   ├── order-update.service.ts     # Order update logic
+    │   │   ├── order-stream.service.ts     # SSE streaming service
+    │   │   └── order-visibility.service.ts # Order visibility management
     │   ├── rabbitmq/
     │   │   └── rabbitmq.service.ts  # Message queue
     │   ├── app.module.ts           # Root module
@@ -314,6 +435,39 @@ docker logs kitchen-nestjs-backend
 docker logs kitchen-frontend
 ```
 
+**Server-Sent Events Issues:**
+```bash
+# Check if SSE endpoint is working
+curl -N http://localhost:3000/api/orders/stream
+
+# Should return: text/event-stream content type
+# Events should be received when orders change
+
+# Check browser console for SSE connection errors
+# EventSource connection should be established automatically
+```
+
+**Order Visibility Issues:**
+```bash
+# Check if isVisible column exists in database
+docker exec kitchen-postgres psql -U kitchen_user -d kitchen_db -c "\d orders"
+
+# View all orders including hidden ones
+docker exec kitchen-postgres psql -U kitchen_user -d kitchen_db -c "SELECT id, status, \"isVisible\" FROM orders;"
+
+# Reset all orders to visible
+docker exec kitchen-postgres psql -U kitchen_user -d kitchen_db -c "UPDATE orders SET \"isVisible\" = true;"
+```
+
+**Modular Services Issues:**
+```bash
+# Check if all services are properly registered
+docker logs kitchen-nestjs-backend | grep -i "service"
+
+# Verify dependency injection is working
+# All services should be instantiated at startup
+```
+
 ### Port Conflicts
 ```bash
 # Check what's using ports
@@ -344,27 +498,33 @@ environment:
   - RABBITMQ_URL=amqp://your-production-rabbitmq
 ```
 
-## 📋 Features
+## 📋 Features Status
 
 ### ✅ Implemented
-- [x] Real-time order management
-- [x] PostgreSQL data persistence  
+- [x] Real-time order management with Server-Sent Events (SSE)
+- [x] PostgreSQL data persistence with order visibility control
 - [x] RabbitMQ message processing
 - [x] Server-side rendering (SSR)
 - [x] Docker containerization
 - [x] TypeScript throughout
-- [x] Optimistic UI updates
-- [x] Auto-refresh functionality
+- [x] Modular backend architecture with specialized services
+- [x] Order soft delete functionality (hide/show orders)
+- [x] Real-time UI updates without polling
+- [x] Order status tracking (Pending → Received → Completed)
+- [x] Completed orders page with visibility controls
+- [x] Responsive UI with smooth animations
 
 ### 🔄 Future Enhancements
-- [ ] User authentication
-- [ ] Order history and analytics
-- [ ] Push notifications
-- [ ] Multi-restaurant support
-- [ ] Real-time WebSocket updates
-- [ ] Order filtering and search
-- [ ] Performance monitoring
+- [ ] User authentication and authorization
+- [ ] Order history and analytics dashboard
+- [ ] Push notifications for mobile devices
+- [ ] Multi-restaurant/kitchen support
+- [ ] Order filtering and search functionality
+- [ ] Performance monitoring and metrics
 - [ ] Automated testing suite
+- [ ] Order priority management
+- [ ] Kitchen staff assignment
+- [ ] Order preparation time tracking
 
 ## 📄 License
 
